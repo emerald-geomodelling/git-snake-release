@@ -19,8 +19,25 @@ def merge_dependency_versions(code, dependencies):
     return code
 
 def set_dependency_versions(path, dependencies):
-    with open(os.path.join(path, "setup.py")) as f:
+    filepath = os.path.join(path, "setup.py")
+    with open(filepath) as f:
         code = f.read()
     code = merge_dependency_versions(code, dependencies)
-    with open(os.path.join(path, "setup.py"), "w") as f:
+    with open(filepath, "w") as f:
+        f.write(code)
+
+def get_version(path):
+    with open(os.path.join(path, "setup.py")) as f:
+        code = f.read()
+    return re.search('version *= *["\'](?P<version>.*)["\']', code).groupdict()["version"]
+
+def merge_version(code, version):
+    return re.sub('(?P<head>version *= *)["\'](?P<version>.*)["\']', '\g<head>"%s"' % version, code)
+
+def set_version(path, version):
+    filepath = os.path.join(path, "setup.py")
+    with open(filepath) as f:
+        code = f.read()
+    code = merge_version(code, version)
+    with open(filepath, "w") as f:
         f.write(code)

@@ -57,12 +57,14 @@ def random_name(prefix='temp-', length=10):
     return prefix + ''.join(random.choice(string.ascii_letters) for i in range(length))
 
 def tag_release(basepath, name, url, version, all_dependencies, **kw):
+    repopath = os.path.join(basepath, name)
     checkout(basepath, name, url, version)
     _ = env()
     +_.cd(os.path.join(basepath, name))
     tmp = random_name()
     +_.git.checkout("-b", tmp)
-    deps.set_dependency_versions(os.path.join(basepath, name), all_dependencies)
+    deps.set_dependency_versions(repopath, all_dependencies)
+    deps.set_version(repopath, version)
     +_.git.add("setup.py")
     +_.git.commit("--allow-empty", "-m", "Updated versions of dependencies")
     +_.git.tag(version)
