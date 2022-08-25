@@ -5,7 +5,7 @@ import re
 import string
 import random
 import toposort
-from . import deps
+from . import setuppy
 
 def get_urls(path):
     _ = env()
@@ -47,7 +47,7 @@ def get_dependency_tree(basepath, name):
         
         checkout(basepath, **dep)
 
-        new = deps.get_dependencies(os.path.join(basepath, dep["name"]))
+        new = setuppy.get_dependencies(os.path.join(basepath, dep["name"]))
         dep["dependencies"] = [item["name"] for item in new]
         new_dependencies.extend(new)
 
@@ -63,8 +63,8 @@ def tag_release(basepath, name, url, version, all_dependencies, **kw):
     +_.cd(os.path.join(basepath, name))
     tmp = random_name()
     +_.git.checkout("-b", tmp)
-    deps.set_dependency_versions(repopath, all_dependencies)
-    deps.set_version(repopath, version)
+    setuppy.set_dependency_versions(repopath, all_dependencies)
+    setuppy.set_version(repopath, version)
     +_.git.add("setup.py")
     +_.git.commit("--allow-empty", "-m", "Updated versions of dependencies")
     +_.git.tag(version)
