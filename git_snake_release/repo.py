@@ -2,11 +2,14 @@ import pieshell
 from pieshell import env
 import os.path
 import re
+import string
+import random
+import toposort
 from . import deps
 
 def get_urls(path):
     _ = env()
-    _.cd(path).run_interactive()
+    +_.cd(path)
     return dict([item[:2] for item in [re.split(r"[\t ]", item) for item in _.git.remote("-v")] if item[2] == "(fetch)"])
  
 def as_dependency(basepath, name):
@@ -16,15 +19,15 @@ def as_dependency(basepath, name):
 def checkout(basepath, name, url, version, **kw):
     _ = env()
     
-    _.cd(basepath).run_interactive()
+    +_.cd(basepath)
 
     path = os.path.join(basepath, name)
     if not os.path.exists(path):
-        _.git.clone(url.replace("git+http", "http"), name).run_interactive()
+        +_.git.clone(url.replace("git+http", "http"), name)
     else:
-        _.cd(name).run_interactive()
-        _.git.checkout("master").run_interactive()
-        _.git.pull("origin", "master").run_interactive()
+        +_.cd(name)
+        +_.git.checkout("master")
+        +_.git.pull("origin", "master")
 
 
 def get_dependency_tree(basepath, name):
@@ -50,24 +53,31 @@ def get_dependency_tree(basepath, name):
 
     return explored_dependencies
 
-def set_dependency_versions(basepath, repo, dependencies):
-    set_dependency_versions(os.path.join(basepath, repo), dependencies)
-    _ = env()
-    _.cd(os.path.join(basepath, name))
-    _.git.commit(message="Version bump")
-    
-def tag_release(basepath, name, url, version):
+def random_name(prefix='temp-', length=10):
+    return prefix + ''.join(random.choice(string.ascii_letters) for i in range(length))
+
+def tag_release(basepath, name, url, version, all_dependencies, **kw):
     checkout(basepath, name, url, version)
     _ = env()
-    _.cd(os.path.join(basepath, name)).run_interactive()
-    _.git.tag(version).run_interactive()
-    _.git.push("--tags", "origin", "master").run_interactive()
+    +_.cd(os.path.join(basepath, name))
+    tmp = random_name()
+    +_.git.checkout("-b", tmp)
+    deps.set_dependency_versions(os.path.join(basepath, name), all_dependencies)
+    +_.git.add("setup.py")
+    +_.git.commit("--allow-empty", "-m", "Updated versions of dependencies")
+    +_.git.tag(version)
+    +_.git.checkout("master")
+    +_.git.branch("-D", tmp)
+    +_.git.push("--tags", "origin", "master")
 
 def tag_releases(basepath, name, version):
-    dependencies = git_snake_release.repo.get_dependency_tree(basepath, name)
-    for dependency in dependencies:
+    dependencies = get_dependency_tree(basepath, name)
+    for dependency in dependencies.values():
         dependency["version"] = version
-    
+        
     for repo in toposort.toposort_flatten({key:value["dependencies"] for key, value in dependencies.items()}, sort=True):
-        set_dependency_versions(os.path.join(basepath, repo), dependencies):
-        tag_release(basepath, repo, ddependencies[repo]["url"], version)
+        print()
+        print("Making release for", repo)
+        print("================================================================")
+        tag_release(basepath, all_dependencies=dependencies, **dependencies[repo])
+
