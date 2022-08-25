@@ -12,32 +12,33 @@ def get_urls(path):
     +_.cd(path)
     return dict([item[:2] for item in [re.split(r"[\t ]", item) for item in _.git.remote("-v")] if item[2] == "(fetch)"])
  
-def as_dependency(basepath, name):
-    path = os.path.join(basepath, name)
-    return {"name": name, "url": get_urls(path)["origin"], "version": None}
+def as_dependency(path):
+    path = os.path.abspath(path)
+    return {"name": os.path.split(path)[1], "url": get_urls(path)["origin"], "version": None}
 
-def checkout(basepath, name, url, version, **kw):
+def checkout(path, url, version, **kw):
+    path = os.path.abspath(path)
     _ = env()
-    
-    +_.cd(basepath)
-
-    path = os.path.join(basepath, name)
     if not os.path.exists(path):
+        basepath, name = os.path.split(os.path.abspath(path))
+        +_.cd(basepath)
         +_.git.clone(url.replace("git+http", "http"), name)
     else:
-        +_.cd(name)
+        +_.cd(path)
         +_.git.checkout("master")
         +_.git.pull("origin", "master")
 
 
-def get_dependency_tree(basepath, name):
+def get_dependency_tree(path):
+    path = os.path.abspath(path)
+
     explored_dependencies = {}
     new_dependencies = []
     
-    path = os.path.join(basepath, name)
-    dep = as_dependency(basepath, name)
+    dep = as_dependency(path)
     new_dependencies.append(dep)
 
+    basepath = os.path.split(path)[0]
     while new_dependencies:
         dep = new_dependencies.pop()
 
@@ -45,7 +46,7 @@ def get_dependency_tree(basepath, name):
             continue
         explored_dependencies[dep["name"]] = dep
         
-        checkout(basepath, **dep)
+        checkout(os.path.join(basepath, dep["name"]), **dep)
 
         new = setuppy.get_dependencies(os.path.join(basepath, dep["name"]))
         dep["dependencies"] = [item["name"] for item in new]
@@ -56,15 +57,15 @@ def get_dependency_tree(basepath, name):
 def random_name(prefix='temp-', length=10):
     return prefix + ''.join(random.choice(string.ascii_letters) for i in range(length))
 
-def tag_release(basepath, name, url, version, all_dependencies, prefix, **kw):
-    repopath = os.path.join(basepath, name)
-    checkout(basepath, name, url, version)
+def tag_release(path, url, version, all_dependencies, prefix, **kw):
+    path = os.path.abspath(path)
+    checkout(path, url, version)
     _ = env()
-    +_.cd(os.path.join(basepath, name))
+    +_.cd(path)
     tmp = random_name()
     +_.git.checkout("-b", tmp)
-    setuppy.set_dependency_versions(repopath, all_dependencies)
-    setuppy.set_version(repopath, version[len(prefix):])
+    setuppy.set_dependency_versions(path, all_dependencies)
+    setuppy.set_version(path, version[len(prefix):])
     +_.git.add("setup.py")
     +_.git.commit("--allow-empty", "-m", "Updated versions of dependencies")
     +_.git.tag(version)
@@ -72,14 +73,18 @@ def tag_release(basepath, name, url, version, all_dependencies, prefix, **kw):
     +_.git.branch("-D", tmp)
     +_.git.push("--tags", "origin", "master")
 
-def tag_releases(basepath, name, prefix, version):
-    dependencies = get_dependency_tree(basepath, name)
+def tag_releases(path, prefix, version):
+    path = os.path.abspath(path)
+    
+    dependencies = get_dependency_tree(path)
     for dependency in dependencies.values():
         dependency["version"] = prefix + version
-        
+
+    basepath = os.path.split(path)[0]
     for repo in toposort.toposort_flatten({key:value["dependencies"] for key, value in dependencies.items()}, sort=True):
         print()
         print("Making release for", repo)
         print("================================================================")
-        tag_release(basepath, all_dependencies=dependencies, prefix=prefix, **dependencies[repo])
+        dependency = dependencies[repo]
+        tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, **dependency)
 

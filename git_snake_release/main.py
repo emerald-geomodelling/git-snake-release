@@ -8,9 +8,8 @@ import os.path
 @click.argument('path', type=str)
 def main(path, prefix, version, **kw):
     """Tag a repository and all dependencies with a version (git tag)"""
-    basepath, name = os.path.split(os.path.abspath(path))
     try:
-        repo.tag_releases(basepath, name, prefix, version)
+        repo.tag_releases(path, prefix, version)
     except Exception as e:
         print(e)
         import pdb, sys
