@@ -56,7 +56,7 @@ def get_dependency_tree(basepath, name):
 def random_name(prefix='temp-', length=10):
     return prefix + ''.join(random.choice(string.ascii_letters) for i in range(length))
 
-def tag_release(basepath, name, url, version, all_dependencies, **kw):
+def tag_release(basepath, name, url, version, all_dependencies, prefix, **kw):
     repopath = os.path.join(basepath, name)
     checkout(basepath, name, url, version)
     _ = env()
@@ -64,7 +64,7 @@ def tag_release(basepath, name, url, version, all_dependencies, **kw):
     tmp = random_name()
     +_.git.checkout("-b", tmp)
     setuppy.set_dependency_versions(repopath, all_dependencies)
-    setuppy.set_version(repopath, version)
+    setuppy.set_version(repopath, version[len(prefix):])
     +_.git.add("setup.py")
     +_.git.commit("--allow-empty", "-m", "Updated versions of dependencies")
     +_.git.tag(version)
@@ -72,14 +72,14 @@ def tag_release(basepath, name, url, version, all_dependencies, **kw):
     +_.git.branch("-D", tmp)
     +_.git.push("--tags", "origin", "master")
 
-def tag_releases(basepath, name, version):
+def tag_releases(basepath, name, prefix, version):
     dependencies = get_dependency_tree(basepath, name)
     for dependency in dependencies.values():
-        dependency["version"] = version
+        dependency["version"] = prefix + version
         
     for repo in toposort.toposort_flatten({key:value["dependencies"] for key, value in dependencies.items()}, sort=True):
         print()
         print("Making release for", repo)
         print("================================================================")
-        tag_release(basepath, all_dependencies=dependencies, **dependencies[repo])
+        tag_release(basepath, all_dependencies=dependencies, prefix=prefix, **dependencies[repo])
 
