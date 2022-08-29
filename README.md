@@ -7,8 +7,8 @@ and make them all depend on this new specific version.
 The solution:
 
 ```
-git-snake-release --version some-tagname-1234 path/to/mygitrepo
+git-snake-release --prefix test-2022-08-25- --version 1.2.3 path/to/mygitrepo
 ```
 
 This will recursively find all git based dependencies (`name @ git+https://url/to/repo.git`), tag them all with the same tag,
-and update setup.py in each of them to link to the new versions of dependencies (`name @ git+https://url/to/repo.git@some-tagname-1234`).
+and update setup.py in each of them to link to the new versions of dependencies (`name @ git+https://url/to/repo.git@test-2022-08-25-1.2.3`).
