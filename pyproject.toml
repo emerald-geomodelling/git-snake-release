@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools >= 61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "git-snake-release"
+version = "0.1.0"
+description = "Tag a set of git repositories & update pyproject.toml/setup.py dependencies"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Egil Moeller", email = "em@emrld.no"},
+]
+requires-python = ">=3.9"
+dependencies = [
+    "click",
+    "toposort",
+    "tomli >= 2.0.0; python_version < '3.11'",
+    "tomli_w >= 1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/emerald-geomodelling/git-snake-release"
+
+[project.scripts]
+git-snake-release = "git_snake_release.main:main"
+
+[tool.setuptools.packages.find]
+include = ["git_snake_release*"]
