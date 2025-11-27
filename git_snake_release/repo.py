@@ -63,8 +63,13 @@ def get_dependency_tree(path):
 def random_name(prefix='temp-', length=10):
     return prefix + ''.join(random.choice(string.ascii_letters) for i in range(length))
 
-def tag_release(path, url, version, all_dependencies, prefix, **kw):
+def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, **kw):
     path = os.path.abspath(path)
+
+    if dry_run:
+        # In dry-run mode, just print what would happen
+        return
+
     checkout(path, url, version)
     _ = env()
     +_.cd(path)
@@ -87,18 +92,46 @@ def tag_release(path, url, version, all_dependencies, prefix, **kw):
     +_.git.branch("-D", tmp)
     +_.git.push("--tags", "origin", "master")
 
-def tag_releases(path, prefix, version):
+def tag_releases(path, prefix, version, dry_run=False):
     path = os.path.abspath(path)
-    
+
     dependencies = get_dependency_tree(path)
     for dependency in dependencies.values():
         dependency["version"] = prefix + version
 
     basepath = os.path.split(path)[0]
-    for repo in toposort.toposort_flatten({key:value["dependencies"] for key, value in dependencies.items()}, sort=True):
+    sorted_repos = toposort.toposort_flatten({key:value["dependencies"] for key, value in dependencies.items()}, sort=True)
+
+    if dry_run:
         print()
-        print("Making release for", repo)
+        print("=" * 70)
+        print("DRY RUN - No changes will be made")
+        print("=" * 70)
+        print()
+        print(f"Tag to be created: {prefix}{version}")
+        print(f"Total repositories: {len(sorted_repos)}")
+        print()
+        print("Repositories (in dependency order):")
+        print("-" * 70)
+        for i, repo_name in enumerate(sorted_repos, 1):
+            dependency = dependencies[repo_name]
+            dep_path = os.path.join(basepath, dependency["name"])
+            config_file = "pyproject.toml" if pyprojecttoml.has_pyproject_toml(dep_path) else "setup.py"
+            dep_count = len(dependency.get("dependencies", []))
+            print(f"  {i:2}. {repo_name}")
+            print(f"      URL: {dependency['url']}")
+            print(f"      Tag: {prefix}{version}")
+            print(f"      Config: {config_file}")
+            print(f"      Dependencies: {dep_count}")
+            print()
+        print("-" * 70)
+        print(f"Total: {len(sorted_repos)} repositories would be tagged with {prefix}{version}")
+        return
+
+    for repo_name in sorted_repos:
+        print()
+        print("Making release for", repo_name)
         print("================================================================")
-        dependency = dependencies[repo]
-        tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, **dependency)
+        dependency = dependencies[repo_name]
+        tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, dry_run=dry_run, **dependency)
 
