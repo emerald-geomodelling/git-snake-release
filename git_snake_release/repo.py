@@ -6,6 +6,7 @@ import string
 import random
 import toposort
 from . import setuppy
+from . import pyprojecttoml
 
 def get_urls(path):
     _ = env()
@@ -48,7 +49,12 @@ def get_dependency_tree(path):
         
         checkout(os.path.join(basepath, dep["name"]), **dep)
 
-        new = setuppy.get_dependencies(os.path.join(basepath, dep["name"]))
+        dep_path = os.path.join(basepath, dep["name"])
+        # Try pyproject.toml first, fall back to setup.py
+        if pyprojecttoml.has_pyproject_toml(dep_path):
+            new = pyprojecttoml.get_dependencies(dep_path)
+        else:
+            new = setuppy.get_dependencies(dep_path)
         dep["dependencies"] = [item["name"] for item in new]
         new_dependencies.extend(new)
 
@@ -64,9 +70,17 @@ def tag_release(path, url, version, all_dependencies, prefix, **kw):
     +_.cd(path)
     tmp = random_name()
     +_.git.checkout("-b", tmp)
-    setuppy.set_dependency_versions(path, all_dependencies)
-    setuppy.set_version(path, version[len(prefix):])
-    +_.git.add("setup.py")
+
+    # Use pyproject.toml if available, otherwise setup.py
+    if pyprojecttoml.has_pyproject_toml(path):
+        pyprojecttoml.set_dependency_versions(path, all_dependencies)
+        pyprojecttoml.set_version(path, version[len(prefix):])
+        +_.git.add("pyproject.toml")
+    else:
+        setuppy.set_dependency_versions(path, all_dependencies)
+        setuppy.set_version(path, version[len(prefix):])
+        +_.git.add("setup.py")
+
     +_.git.commit("--allow-empty", "-m", "Updated versions of dependencies")
     +_.git.tag(version)
     +_.git.checkout("master")
