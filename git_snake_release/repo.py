@@ -1,5 +1,4 @@
-import pieshell
-from pieshell import env
+import subprocess
 import os.path
 import re
 import string
@@ -8,26 +7,43 @@ import toposort
 from . import setuppy
 from . import pyprojecttoml
 
+
+def run_git(args, cwd=None, capture_output=True):
+    """Run a git command and return the output."""
+    result = subprocess.run(
+        ["git"] + args,
+        cwd=cwd,
+        capture_output=capture_output,
+        text=True,
+        check=True
+    )
+    return result.stdout.strip() if capture_output else None
+
+
 def get_urls(path):
-    _ = env()
-    +_.cd(path)
-    return dict([item[:2] for item in [re.split(r"[\t ]", item) for item in _.git.remote("-v")] if item[2] == "(fetch)"])
- 
+    output = run_git(["remote", "-v"], cwd=path)
+    lines = output.split("\n") if output else []
+    result = {}
+    for line in lines:
+        parts = re.split(r"[\t ]", line)
+        if len(parts) >= 3 and parts[2] == "(fetch)":
+            result[parts[0]] = parts[1]
+    return result
+
+
 def as_dependency(path):
     path = os.path.abspath(path)
     return {"name": os.path.split(path)[1], "url": get_urls(path)["origin"], "version": None}
 
+
 def checkout(path, url, version, **kw):
     path = os.path.abspath(path)
-    _ = env()
     if not os.path.exists(path):
         basepath, name = os.path.split(os.path.abspath(path))
-        +_.cd(basepath)
-        +_.git.clone(url.replace("git+http", "http"), name)
+        run_git(["clone", url.replace("git+http", "http"), name], cwd=basepath, capture_output=False)
     else:
-        +_.cd(path)
-        +_.git.checkout("master")
-        +_.git.pull("origin", "master")
+        run_git(["checkout", "master"], cwd=path, capture_output=False)
+        run_git(["pull", "origin", "master"], cwd=path, capture_output=False)
 
 
 def get_dependency_tree(path):
@@ -35,7 +51,7 @@ def get_dependency_tree(path):
 
     explored_dependencies = {}
     new_dependencies = []
-    
+
     dep = as_dependency(path)
     new_dependencies.append(dep)
 
@@ -46,7 +62,7 @@ def get_dependency_tree(path):
         if dep["name"] in explored_dependencies:
             continue
         explored_dependencies[dep["name"]] = dep
-        
+
         checkout(os.path.join(basepath, dep["name"]), **dep)
 
         dep_path = os.path.join(basepath, dep["name"])
@@ -60,8 +76,10 @@ def get_dependency_tree(path):
 
     return explored_dependencies
 
+
 def random_name(prefix='temp-', length=10):
     return prefix + ''.join(random.choice(string.ascii_letters) for i in range(length))
+
 
 def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, **kw):
     path = os.path.abspath(path)
@@ -71,26 +89,25 @@ def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, **k
         return
 
     checkout(path, url, version)
-    _ = env()
-    +_.cd(path)
     tmp = random_name()
-    +_.git.checkout("-b", tmp)
+    run_git(["checkout", "-b", tmp], cwd=path, capture_output=False)
 
     # Use pyproject.toml if available, otherwise setup.py
     if pyprojecttoml.has_pyproject_toml(path):
         pyprojecttoml.set_dependency_versions(path, all_dependencies)
         pyprojecttoml.set_version(path, version[len(prefix):])
-        +_.git.add("pyproject.toml")
+        run_git(["add", "pyproject.toml"], cwd=path, capture_output=False)
     else:
         setuppy.set_dependency_versions(path, all_dependencies)
         setuppy.set_version(path, version[len(prefix):])
-        +_.git.add("setup.py")
+        run_git(["add", "setup.py"], cwd=path, capture_output=False)
 
-    +_.git.commit("--allow-empty", "-m", "Updated versions of dependencies")
-    +_.git.tag(version)
-    +_.git.checkout("master")
-    +_.git.branch("-D", tmp)
-    +_.git.push("--tags", "origin", "master")
+    run_git(["commit", "--allow-empty", "-m", "Updated versions of dependencies"], cwd=path, capture_output=False)
+    run_git(["tag", version], cwd=path, capture_output=False)
+    run_git(["checkout", "master"], cwd=path, capture_output=False)
+    run_git(["branch", "-D", tmp], cwd=path, capture_output=False)
+    run_git(["push", "--tags", "origin", "master"], cwd=path, capture_output=False)
+
 
 def tag_releases(path, prefix, version, dry_run=False):
     path = os.path.abspath(path)
@@ -134,4 +151,3 @@ def tag_releases(path, prefix, version, dry_run=False):
         print("================================================================")
         dependency = dependencies[repo_name]
         tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, dry_run=dry_run, **dependency)
-

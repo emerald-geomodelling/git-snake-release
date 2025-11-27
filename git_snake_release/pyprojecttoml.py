@@ -29,9 +29,10 @@ def get_dependencies(path):
 
     git_deps = []
     for dep in dependencies:
-        # Match: "name @ git+https://..." with optional @version at end
+        # Match: "name @ git+https://[user:token@]host/org/repo.git[@version]"
+        # The URL may contain credentials like user:token@ before the host
         match = re.match(
-            r'(?P<name>[^\s@]+)\s*@\s*(?P<url>git\+https://[^@\s]+?)(?:@(?P<version>[^\s]+))?$',
+            r'(?P<name>[^\s@]+)\s*@\s*(?P<url>git\+https://[^\s]+\.git)(?:@(?P<version>[^\s]+))?$',
             dep.strip()
         )
         if match:
@@ -45,7 +46,8 @@ def merge_dependency_version(dep_string, name, version, **kw):
     Update a single dependency string with a new version tag.
     """
     # Pattern to match the dependency and optionally existing version
-    pattern = rf'({re.escape(name)})\s*@\s*(git\+https://[^@\s]+?)(?:@[^\s]+)?$'
+    # The URL may contain credentials, so match up to .git
+    pattern = rf'({re.escape(name)})\s*@\s*(git\+https://[^\s]+\.git)(?:@[^\s]+)?$'
     replacement = rf'\1 @ \2@{version}'
     return re.sub(pattern, replacement, dep_string)
 

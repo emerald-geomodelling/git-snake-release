@@ -9,13 +9,7 @@ import os.path
 @click.argument('path', type=str)
 def main(path, prefix, version, dry_run, **kw):
     """Tag a repository and all dependencies with a version (git tag)"""
-    try:
-        repo.tag_releases(path, prefix, version, dry_run=dry_run)
-    except Exception as e:
-        print(e)
-        import pdb, sys
-        sys.last_traceback = sys.exc_info()[2]
-        pdb.pm()
+    repo.tag_releases(path, prefix, version, dry_run=dry_run)
 
 if __name__ == '__main__':
     main()
