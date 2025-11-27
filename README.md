@@ -24,6 +24,16 @@ and update **pyproject.toml** (or setup.py for legacy projects) in each of them 
 pip install git+https://github.com/emerald-geomodelling/git-snake-release.git
 ```
 
+## Dry Run
+
+Preview what would be done without making any changes:
+
+```bash
+git-snake-release --dry-run --prefix "2024-11-27-v." --version 0.17.2 /path/to/release-all
+```
+
+This shows all repositories in dependency order with their URLs, tags, and config file types.
+
 ## Example
 
 ```bash
