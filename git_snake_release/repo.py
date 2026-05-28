@@ -81,7 +81,16 @@ def random_name(prefix='temp-', length=10):
     return prefix + ''.join(random.choice(string.ascii_letters) for i in range(length))
 
 
-def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, **kw):
+def tag_exists(path, tag):
+    """Check if a git tag already exists in the repository."""
+    try:
+        run_git(["rev-parse", f"refs/tags/{tag}"], cwd=path)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, skip_existing=False, **kw):
     path = os.path.abspath(path)
 
     if dry_run:
@@ -89,6 +98,12 @@ def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, **k
         return
 
     checkout(path, url, version)
+
+    # Check if tag already exists
+    if skip_existing and tag_exists(path, version):
+        print(f"  Tag '{version}' already exists, skipping...")
+        return
+
     tmp = random_name()
     run_git(["checkout", "-b", tmp], cwd=path, capture_output=False)
 
@@ -109,7 +124,7 @@ def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, **k
     run_git(["push", "--tags", "origin", "master"], cwd=path, capture_output=False)
 
 
-def tag_releases(path, prefix, version, dry_run=False):
+def tag_releases(path, prefix, version, dry_run=False, skip_existing=False):
     path = os.path.abspath(path)
 
     dependencies = get_dependency_tree(path)
@@ -127,6 +142,8 @@ def tag_releases(path, prefix, version, dry_run=False):
         print()
         print(f"Tag to be created: {prefix}{version}")
         print(f"Total repositories: {len(sorted_repos)}")
+        if skip_existing:
+            print("(--skip-existing enabled: repos with existing tags will be skipped)")
         print()
         print("Repositories (in dependency order):")
         print("-" * 70)
@@ -135,7 +152,9 @@ def tag_releases(path, prefix, version, dry_run=False):
             dep_path = os.path.join(basepath, dependency["name"])
             config_file = "pyproject.toml" if pyprojecttoml.has_pyproject_toml(dep_path) else "setup.py"
             dep_count = len(dependency.get("dependencies", []))
-            print(f"  {i:2}. {repo_name}")
+            already_tagged = tag_exists(dep_path, prefix + version) if skip_existing else False
+            status = " [EXISTS - will skip]" if already_tagged else ""
+            print(f"  {i:2}. {repo_name}{status}")
             print(f"      URL: {dependency['url']}")
             print(f"      Tag: {prefix}{version}")
             print(f"      Config: {config_file}")
@@ -150,4 +169,4 @@ def tag_releases(path, prefix, version, dry_run=False):
         print("Making release for", repo_name)
         print("================================================================")
         dependency = dependencies[repo_name]
-        tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, dry_run=dry_run, **dependency)
+        tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, dry_run=dry_run, skip_existing=skip_existing, **dependency)
