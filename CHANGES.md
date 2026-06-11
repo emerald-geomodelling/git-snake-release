@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-06-11
+
+### Changed
+
+- **Default branch no longer hard-coded to `master`.** `git-snake-release` now resolves each repository's default branch instead of assuming `master`, so repos whose default branch is `main` (or any other name) can be tagged. Resolution order: an optional caller-supplied candidate list, then `origin/HEAD`, then `git remote show origin`, falling back to `master`.
+
+### Added
+
+- **`--default-branch` option** (repeatable): supply candidate default branch name(s) in priority order. The first that exists in a given repo is used; if none match (or none are given) the branch is auto-detected. Example: `--default-branch main --default-branch master`.
+
+### Motivation
+
+The branch was hard-coded as `master` in `checkout`/`tag_release`, so any repo using `main` (e.g. forked external libraries added to the release graph) could not be tagged. Auto-detection handles arbitrary branch names with no configuration, while the option allows forcing or hinting a branch when needed.
+
 ## 2026-01-29
 
 ### Added
