@@ -36,17 +36,56 @@ def as_dependency(path):
     return {"name": os.path.split(path)[1], "url": get_urls(path)["origin"], "version": None}
 
 
-def checkout(path, url, version, **kw):
+def default_branch(path, candidates=None):
+    """Resolve a repository's default branch.
+
+    Resolution order:
+      1. If ``candidates`` is given, the first name that exists as an
+         ``origin/<name>`` remote-tracking branch. This lets a caller force a
+         specific branch, or pass a safe ordered hint such as
+         ``("main", "master")`` that adapts per repo.
+      2. The ``origin/HEAD`` symbolic ref (set by ``git clone``) -- handles an
+         arbitrary default branch name with no configuration.
+      3. The ``HEAD branch`` reported by ``git remote show origin`` (network).
+      4. ``"master"`` as a last-ditch fallback (the previously hard-coded value).
+    """
+    if candidates:
+        for name in candidates:
+            try:
+                run_git(["rev-parse", "--verify", "--quiet",
+                         f"refs/remotes/origin/{name}"], cwd=path)
+                return name
+            except subprocess.CalledProcessError:
+                continue
+    try:
+        ref = run_git(["symbolic-ref", "refs/remotes/origin/HEAD"], cwd=path)
+        if ref:
+            return ref.rsplit("/", 1)[-1]
+    except subprocess.CalledProcessError:
+        pass
+    try:
+        out = run_git(["remote", "show", "origin"], cwd=path)
+        match = re.search(r"HEAD branch:\s*(\S+)", out or "")
+        if match:
+            return match.group(1)
+    except subprocess.CalledProcessError:
+        pass
+    return "master"
+
+
+def checkout(path, url, version, default_branches=None, **kw):
     path = os.path.abspath(path)
     if not os.path.exists(path):
         basepath, name = os.path.split(os.path.abspath(path))
         run_git(["clone", url.replace("git+http", "http"), name], cwd=basepath, capture_output=False)
-    else:
-        run_git(["checkout", "master"], cwd=path, capture_output=False)
-        run_git(["pull", "origin", "master"], cwd=path, capture_output=False)
+        return default_branch(path, default_branches)
+    branch = default_branch(path, default_branches)
+    run_git(["checkout", branch], cwd=path, capture_output=False)
+    run_git(["pull", "origin", branch], cwd=path, capture_output=False)
+    return branch
 
 
-def get_dependency_tree(path):
+def get_dependency_tree(path, default_branches=None):
     path = os.path.abspath(path)
 
     explored_dependencies = {}
@@ -63,7 +102,7 @@ def get_dependency_tree(path):
             continue
         explored_dependencies[dep["name"]] = dep
 
-        checkout(os.path.join(basepath, dep["name"]), **dep)
+        checkout(os.path.join(basepath, dep["name"]), default_branches=default_branches, **dep)
 
         dep_path = os.path.join(basepath, dep["name"])
         # Try pyproject.toml first, fall back to setup.py
@@ -90,14 +129,14 @@ def tag_exists(path, tag):
         return False
 
 
-def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, skip_existing=False, **kw):
+def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, skip_existing=False, default_branches=None, **kw):
     path = os.path.abspath(path)
 
     if dry_run:
         # In dry-run mode, just print what would happen
         return
 
-    checkout(path, url, version)
+    branch = checkout(path, url, version, default_branches=default_branches)
 
     # Check if tag already exists
     if skip_existing and tag_exists(path, version):
@@ -119,15 +158,15 @@ def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, ski
 
     run_git(["commit", "--allow-empty", "-m", "Updated versions of dependencies"], cwd=path, capture_output=False)
     run_git(["tag", version], cwd=path, capture_output=False)
-    run_git(["checkout", "master"], cwd=path, capture_output=False)
+    run_git(["checkout", branch], cwd=path, capture_output=False)
     run_git(["branch", "-D", tmp], cwd=path, capture_output=False)
-    run_git(["push", "--tags", "origin", "master"], cwd=path, capture_output=False)
+    run_git(["push", "--tags", "origin", branch], cwd=path, capture_output=False)
 
 
-def tag_releases(path, prefix, version, dry_run=False, skip_existing=False):
+def tag_releases(path, prefix, version, dry_run=False, skip_existing=False, default_branches=None):
     path = os.path.abspath(path)
 
-    dependencies = get_dependency_tree(path)
+    dependencies = get_dependency_tree(path, default_branches=default_branches)
     for dependency in dependencies.values():
         dependency["version"] = prefix + version
 
@@ -169,4 +208,4 @@ def tag_releases(path, prefix, version, dry_run=False, skip_existing=False):
         print("Making release for", repo_name)
         print("================================================================")
         dependency = dependencies[repo_name]
-        tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, dry_run=dry_run, skip_existing=skip_existing, **dependency)
+        tag_release(os.path.join(basepath, dependency["name"]), all_dependencies=dependencies, prefix=prefix, dry_run=dry_run, skip_existing=skip_existing, default_branches=default_branches, **dependency)
