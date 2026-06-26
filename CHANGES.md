@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-26
+
+### Fixed
+
+- **`--skip-existing` now checks the remote, not the local clone.** Previously `tag_exists` looked up the tag in the local repo, so a tag created by an earlier run but never pushed (e.g. the push failed mid-release) was treated as "already exists" and silently skipped on the next run — the run reported success while the remote stayed untagged. It now queries `git ls-remote --tags origin <tag>`, so a repo is only skipped when it is genuinely released on origin.
+- **Tag creation tolerates a stale local tag** (`git tag -f`), so a created-but-unpushed tag from a prior failed run is overwritten and pushed instead of aborting the release.
+
 ## 2026-06-11
 
 ### Changed
