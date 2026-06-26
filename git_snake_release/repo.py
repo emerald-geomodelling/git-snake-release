@@ -121,10 +121,16 @@ def random_name(prefix='temp-', length=10):
 
 
 def tag_exists(path, tag):
-    """Check if a git tag already exists in the repository."""
+    """Check if a git tag already exists on the remote.
+
+    Checks origin, not the local clone: a tag created by an earlier run but never
+    pushed (e.g. the push failed) must NOT be treated as an existing release and
+    skipped -- otherwise the run reports success while the remote stays untagged.
+    --skip-existing means "already released", i.e. present on origin.
+    """
     try:
-        run_git(["rev-parse", f"refs/tags/{tag}"], cwd=path)
-        return True
+        out = run_git(["ls-remote", "--tags", "origin", tag], cwd=path)
+        return bool(out and out.strip())
     except subprocess.CalledProcessError:
         return False
 
@@ -157,7 +163,9 @@ def tag_release(path, url, version, all_dependencies, prefix, dry_run=False, ski
         run_git(["add", "setup.py"], cwd=path, capture_output=False)
 
     run_git(["commit", "--allow-empty", "-m", "Updated versions of dependencies"], cwd=path, capture_output=False)
-    run_git(["tag", version], cwd=path, capture_output=False)
+    # -f so a stale local tag left by an earlier failed run is overwritten rather
+    # than aborting here; tag_exists() already confirmed origin does not have it.
+    run_git(["tag", "-f", version], cwd=path, capture_output=False)
     run_git(["checkout", branch], cwd=path, capture_output=False)
     run_git(["branch", "-D", tmp], cwd=path, capture_output=False)
     run_git(["push", "--tags", "origin", branch], cwd=path, capture_output=False)
